@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 import streamlit as st
@@ -69,8 +70,7 @@ st.markdown(
         font-size: 0.72rem !important;
         color: #8a8a8a !important;
         word-break: break-all;
-    }
-    </style>
+    }</style>
     """,
     unsafe_allow_html=True,
 )
@@ -108,22 +108,20 @@ def sync_words(add, remove):
         write_lines(WORDS_FILE, lines)
 
 
-def sync_images(changes):
-    """changes: [(path, checked)]，只处理本轮真正渲染过的图片。"""
+def sync_images(paths):
+    """点击图片即切换收录状态（有则删、无则加）。"""
+    if not paths:
+        return
     lines = read_lines(IMAGES_FILE)
     present = set(lines)
-    dirty = False
-    for path, checked in changes:
-        if checked and path not in present:
-            lines.append(path)
-            present.add(path)
-            dirty = True
-        elif not checked and path in present:
+    for path in paths:
+        if path in present:
             lines = [line for line in lines if line != path]
             present.discard(path)
-            dirty = True
-    if dirty:
-        write_lines(IMAGES_FILE, lines)
+        else:
+            lines.append(path)
+            present.add(path)
+    write_lines(IMAGES_FILE, lines)
 
 
 # ---------------------------------------------------------------- 数据
@@ -156,27 +154,61 @@ def group_images(words):
 
 
 def render_images(paths, key_prefix, selectable, picked_set, per_row=4):
-    """图片网格；selectable 时每张图带勾选框，返回 [(path, checked)]。"""
-    changes = []
+    """图片网格。
+
+    selectable 时整张图就是一个按钮（透明按钮盖在图上），点图即切换收录，
+    已收录的图带一圈高亮描边。返回本轮被点击的图片路径列表。
+    """
+    if not selectable:
+        cols = st.columns(per_row)
+        for i, path in enumerate(paths):
+            with cols[i % per_row]:
+                st.image(Image.open(path), use_container_width=True)
+        return []
+
+    style, clicked = [], []
     cols = st.columns(per_row)
     for i, path in enumerate(paths):
+        digest = hashlib.md5(path.encode("utf-8")).hexdigest()[:10]
+        picked = path in picked_set
+        tile_key = f"{key_prefix}-tile-{digest}"
+        button_key = f"{key_prefix}-pick-{digest}"
+
         with cols[i % per_row]:
-            st.image(Image.open(path), use_container_width=True)
-            if selectable:
-                checked = st.checkbox(
-                    os.path.basename(path),
-                    value=path in picked_set,
-                    key=f"{key_prefix}_{path}",
-                )
-                changes.append((path, checked))
-    return changes
+            with st.container(key=tile_key):
+                st.image(Image.open(path), use_container_width=True)
+                if st.button(" ", key=button_key, use_container_width=True):
+                    clicked.append(path)
+
+        style.append(
+            f".st-key-{tile_key} {{ position: relative; }}"
+            f".st-key-{button_key} {{ position: absolute; top: 0; left: 0; z-index: 5;"
+            f" width: 100%; height: 150px; }}"
+            f".st-key-{button_key} > div, .st-key-{button_key} [data-testid^='stButton']"
+            f" {{ width: 100% !important; height: 150px !important; }}"
+            f".st-key-{button_key} button {{ width: 100% !important; height: 150px !important;"
+            f" min-height: 150px !important; opacity: 0; cursor: pointer; }}"
+            + (
+                f".st-key-{tile_key}::after {{ content: '✓'; position: absolute; top: 4px;"
+                f" right: 6px; z-index: 6; font-size: 1.1rem; color: #000;"
+                f" background: #e8e8e8; width: 22px; height: 22px; line-height: 22px;"
+                f" text-align: center; }}"
+                f".st-key-{tile_key} [data-testid='stImage'] {{ outline: 2px solid #e8e8e8;"
+                f" outline-offset: -2px; }}"
+                if picked
+                else ""
+            )
+        )
+
+    st.markdown(f"<style>{''.join(style)}</style>", unsafe_allow_html=True)
+    return clicked
 
 
 # ---------------------------------------------------------------- 页面
 st.title("全自动VV表情包fetch bot")
 
 select_mode = st.toggle(
-    "选择模式：点词＝搜索并收录，勾图＝收录（立即写入文件）", key="select_mode"
+    "选择模式：点词＝搜索并收录，点图＝收录/取消（立即写入文件）", key="select_mode"
 )
 
 query = st.text_input("模糊搜索:", key="search_text")
@@ -184,11 +216,12 @@ query = st.text_input("模糊搜索:", key="search_text")
 if query:
     images = fetch_images(query)
     if images:
-        changes = render_images(
+        clicked = render_images(
             images, "search", select_mode, set(picked_images), per_row=4
         )
-        if select_mode:
-            sync_images(changes)
+        if select_mode and clicked:
+            sync_images(clicked)
+            st.rerun()
     else:
         st.write("没搜到...")
 
@@ -246,12 +279,15 @@ if select_mode:
     st.divider()
     st.subheader("图片墙")
     wall = group_images(groups[group])
-    st.caption(f"当前分组「{group}」共 {len(wall)} 张图 · 勾选立即写入 {IMAGES_FILE}")
+    st.caption(f"当前分组「{group}」共 {len(wall)} 张图 · 点图即收录/取消，写入 {IMAGES_FILE}")
     if wall:
         LIMIT = 60
         if len(wall) > LIMIT:
             st.caption(f"（仅显示前 {LIMIT} 张，选更小的分组或直接用搜索看其余）")
-        sync_images(render_images(wall[:LIMIT], "wall", True, picked_set, per_row=4))
+        clicked = render_images(wall[:LIMIT], "wall", True, picked_set, per_row=4)
+        if clicked:
+            sync_images(clicked)
+            st.rerun()
 
     st.divider()
     st.subheader("已选清单")
