@@ -49,6 +49,35 @@ st.markdown(
         border-color: #e8e8e8 !important;
         color: #000000 !important;
     }
+    /* 侧边栏：加宽一档，里边的文案块收紧 */
+    [data-testid="stSidebar"] {
+        min-width: 380px !important;
+        max-width: 380px !important;
+    }
+    [data-testid="stSidebar"] button[data-variant="pills"] {
+        min-height: 28px;
+        padding: 3px 8px !important;
+    }
+    [data-testid="stSidebar"] button[data-variant="pills"] p {
+        font-size: 0.82rem !important;
+        line-height: 1.35 !important;
+        letter-spacing: 0;
+    }
+    [data-testid="stSidebar"] div[role="radiogroup"],
+    [data-testid="stSidebar"] div[role="toolbar"] {
+        gap: 6px !important;
+        row-gap: 6px !important;
+    }
+    /* 已收集句子的小方块 */
+    .chip {
+        display: inline-block;
+        margin: 0 6px 6px 0;
+        padding: 6px 12px;
+        background: #141414;
+        border: 1px solid #242424;
+        color: #e8e8e8;
+        font-size: 0.95rem;
+    }
     /* 图片墙：等高裁切，直角 */
     [data-testid="stImage"] img {
         height: 150px !important;
@@ -65,12 +94,7 @@ st.markdown(
         border-radius: 0 !important;
     }
     hr { border-color: #1c1c1c !important; }
-    /* 图片勾选框标签：只显示小号文件名 */
-    div[data-testid="stCheckbox"] label p {
-        font-size: 0.72rem !important;
-        color: #8a8a8a !important;
-        word-break: break-all;
-    }</style>
+    </style>
     """,
     unsafe_allow_html=True,
 )
@@ -157,7 +181,7 @@ def render_images(paths, key_prefix, selectable, picked_set, per_row=4):
     """图片网格。
 
     selectable 时整张图就是一个按钮（透明按钮盖在图上），点图即切换收录，
-    已收录的图带一圈高亮描边。返回本轮被点击的图片路径列表。
+    已收录的图带一圈描边和 ✓ 角标。返回本轮被点击的图片路径列表。
     """
     if not selectable:
         cols = st.columns(per_row)
@@ -204,103 +228,148 @@ def render_images(paths, key_prefix, selectable, picked_set, per_row=4):
     return clicked
 
 
-# ---------------------------------------------------------------- 页面
-st.title("全自动VV表情包fetch bot")
+# ---------------------------------------------------------------- 侧边栏：检索与挑选
+with st.sidebar:
+    st.subheader("检索与挑选")
 
-select_mode = st.toggle(
-    "选择模式：点词＝搜索并收录，点图＝收录/取消（立即写入文件）", key="select_mode"
-)
+    select_mode = st.toggle(
+        "选择模式：点词＝搜索并收录，点图＝收录/取消", key="select_mode"
+    )
 
-query = st.text_input("模糊搜索:", key="search_text")
+    query = st.text_input("模糊搜索:", key="search_text")
 
-if query:
-    images = fetch_images(query)
-    if images:
-        clicked = render_images(
-            images, "search", select_mode, set(picked_images), per_row=4
-        )
-        if select_mode and clicked:
-            sync_images(clicked)
-            st.rerun()
-    else:
-        st.write("没搜到...")
-
-st.divider()
-
-st.subheader("全部文案")
-st.caption(f"共 {len(text_list)} 条" + (" · 选择模式：点一次收录，再点一次取消" if select_mode else " · 点击即搜索"))
-
-left, right = st.columns([1, 3])
-with left:
     dimension = st.radio("分类维度", list(DIMENSIONS), key="dimension")
     sort_by = st.selectbox("排序依据", list(SORT_KEYS), key="sort_by")
     descending = (
         st.radio("排序方向", ["升序", "降序"], key="order", horizontal=True) == "降序"
     )
 
-groups = build_groups(text_list, text_to_filepath, dimension, sort_by, descending)
-group = right.selectbox(
-    f"分组（{len(groups)} 组）", list(groups), key=f"group_{dimension}"
-)
-right.caption(f"当前：{dimension} 分组 · {sort_by} {'降序' if descending else '升序'}")
+    groups = build_groups(text_list, text_to_filepath, dimension, sort_by, descending)
+    group = st.selectbox(
+        f"分组（{len(groups)} 组）", list(groups), key=f"group_{dimension}"
+    )
+    st.caption(
+        f"{dimension} · {sort_by} {'降序' if descending else '升序'} · {len(groups[group])} 条"
+        + (" · 点一次收录、再点取消" if select_mode else " · 点击即搜索")
+    )
 
-picked_set = set(picked_words)
-with st.container(height=520, border=True):
-    if select_mode:
-        selected = st.pills(
-            "点击文案即搜索并收录",
-            groups[group],
-            selection_mode="multi",
-            default=[w for w in groups[group] if w in picked_set],
-            key=f"pills_sel_{dimension}_{group}",
-        ) or []
-        added = [w for w in selected if w not in picked_set]
-        removed = [w for w in groups[group] if w in picked_set and w not in set(selected)]
-        if added or removed:
-            sync_words(added, removed)
-            if len(added) == 1 and not removed:
-                st.session_state["pending_query"] = added[0]
+    picked_set = set(picked_words)
+    with st.container(height=340, border=True):
+        if select_mode:
+            selected = (
+                st.pills(
+                    "文案",
+                    groups[group],
+                    selection_mode="multi",
+                    default=[w for w in groups[group] if w in picked_set],
+                    key=f"pills_sel_{dimension}_{group}",
+                    label_visibility="collapsed",
+                )
+                or []
+            )
+            added = [w for w in selected if w not in picked_set]
+            removed = [
+                w for w in groups[group] if w in picked_set and w not in set(selected)
+            ]
+            if added or removed:
+                sync_words(added, removed)
+                if len(added) == 1 and not removed:
+                    st.session_state["pending_query"] = added[0]
+                    st.rerun()
+        else:
+            picked = st.pills(
+                "文案",
+                groups[group],
+                selection_mode="single",
+                key=f"pills_{dimension}_{group}",
+                label_visibility="collapsed",
+            )
+            if picked and picked != st.session_state["search_text"]:
+                st.session_state["pending_query"] = picked
                 st.rerun()
+
+    st.caption(f"词 {len(read_lines(WORDS_FILE))} 条 · 图 {len(read_lines(IMAGES_FILE))} 张")
+
+# ---------------------------------------------------------------- 主区
+st.title("全自动VV表情包fetch bot")
+
+view = st.radio(
+    "视图",
+    ["搜索结果", "图片墙", "已收集"],
+    horizontal=True,
+    key="view",
+    label_visibility="collapsed",
+)
+
+active_mode = select_mode
+
+if view == "搜索结果":
+    if not query:
+        st.caption("左侧输入搜索词，或在侧边栏点一条文案。")
     else:
-        picked = st.pills(
-            "点击文案即搜索",
-            groups[group],
-            selection_mode="single",
-            key=f"pills_{dimension}_{group}",
-        )
-        if picked and picked != st.session_state["search_text"]:
-            st.session_state["pending_query"] = picked
-            st.rerun()
+        images = fetch_images(query)
+        st.subheader(f"「{query}」· {len(images)} 张")
+        if images:
+            clicked = render_images(
+                images, "search", active_mode, set(picked_images), per_row=5
+            )
+            if clicked:
+                sync_images(clicked)
+                st.rerun()
+        else:
+            st.caption("没搜到...")
 
-if select_mode:
-    picked_images = read_lines(IMAGES_FILE)
-    picked_set = set(picked_images)
-
-    st.divider()
-    st.subheader("图片墙")
+elif view == "图片墙":
     wall = group_images(groups[group])
-    st.caption(f"当前分组「{group}」共 {len(wall)} 张图 · 点图即收录/取消，写入 {IMAGES_FILE}")
+    st.subheader(f"图片墙 · {group} · {len(wall)} 张")
+    st.caption(
+        ("点图即收录/取消" if active_mode else "打开侧边栏「选择模式」后可点击收录")
+        + f" · 写入 {IMAGES_FILE}"
+    )
     if wall:
-        LIMIT = 60
+        LIMIT = 80
         if len(wall) > LIMIT:
             st.caption(f"（仅显示前 {LIMIT} 张，选更小的分组或直接用搜索看其余）")
-        clicked = render_images(wall[:LIMIT], "wall", True, picked_set, per_row=4)
+        clicked = render_images(
+            wall[:LIMIT], "wall", active_mode, set(picked_images), per_row=5
+        )
         if clicked:
             sync_images(clicked)
             st.rerun()
 
-    st.divider()
-    st.subheader("已选清单")
+else:  # 已收集
     picked_words = read_lines(WORDS_FILE)
     picked_images = read_lines(IMAGES_FILE)
-    col_words, col_images = st.columns(2)
-    with col_words:
-        st.markdown(f"**词 · {len(picked_words)} 条** → `{WORDS_FILE}`")
-        st.code("\n".join(picked_words) if picked_words else "(空)", language="text")
-    with col_images:
-        st.markdown(f"**图 · {len(picked_images)} 张** → `{IMAGES_FILE}`")
-        st.code("\n".join(picked_images) if picked_images else "(空)", language="text")
-    if st.button("清空两个清单"):
-        write_lines(WORDS_FILE, [])
-        write_lines(IMAGES_FILE, [])
-        st.rerun()
+    st.subheader(f"已收集 · 句 {len(picked_words)} 条 · 图 {len(picked_images)} 张")
+
+    if picked_words:
+        st.markdown(
+            "".join(f'<span class="chip">{w}</span>' for w in picked_words),
+            unsafe_allow_html=True,
+        )
+        with st.expander("按文本查看 / 复制"):
+            st.code("\n".join(picked_words), language="text")
+        st.caption(f"句子写入 {WORDS_FILE}（在侧边栏取消勾选该词即可移除）")
+    else:
+        st.caption(f"还没有收录句子（{WORDS_FILE} 为空）")
+
+    st.divider()
+
+    if picked_images:
+        st.markdown(f"**图片 {len(picked_images)} 张** → `{IMAGES_FILE}`（点图取消收录）")
+        clicked = render_images(
+            picked_images, "picked", True, set(picked_images), per_row=5
+        )
+        if clicked:
+            sync_images(clicked)
+            st.rerun()
+        with st.expander("按路径查看 / 复制"):
+            st.code("\n".join(picked_images), language="text")
+    else:
+        st.caption(f"还没有收录图片（{IMAGES_FILE} 为空）")
+
+    if picked_words or picked_images:
+        if st.button("清空两个清单"):
+            write_lines(WORDS_FILE, [])
+            write_lines(IMAGES_FILE, [])
+            st.rerun()
