@@ -233,6 +233,8 @@ def toggle_images(paths):
 # 点文案 → 搜索词。必须在输入框创建之前写入 session_state
 if "pending_query" in st.session_state:
     st.session_state["search_text"] = st.session_state.pop("pending_query")
+    # 点文案进来的一律走精确搜索（手打关键词仍是模糊）
+    st.session_state["exact_query"] = st.session_state["search_text"]
 st.session_state.setdefault("search_text", "")
 
 text_list, text_to_filepath, _ = _load_data()
@@ -248,7 +250,24 @@ for _text, _files in text_to_filepath.items():
 DIGEST_PATHS = st.session_state.setdefault("digest_paths", {})
 
 
-def fetch_images(query):
+def on_type_query():
+    """手打关键词：清掉精确标记，回到模糊搜索。"""
+    st.session_state["exact_query"] = None
+
+
+def pick_word(key):
+    """侧边栏点文案：把选中的词交给下一轮，走精确搜索。"""
+    value = st.session_state.get(key)
+    if value:
+        st.session_state["pending_query"] = value
+
+
+def fetch_images(query, exact=False):
+    if exact:
+        files = text_to_filepath.get(query, [])
+        return [
+            os.path.join("vvs", name.replace(".txt", ".jpg")) for name in files
+        ]
     results = find_matches(query, text_list, text_to_filepath)
     return locate_matched_images(results)
 
@@ -382,7 +401,9 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
 with st.sidebar:
     st.subheader("检索与挑选")
 
-    query = st.text_input("模糊搜索:", key="search_text")
+    query = st.text_input(
+        "模糊搜索:", key="search_text", on_change=on_type_query
+    )
 
     dimension = st.radio(
         "分类维度",
@@ -406,17 +427,17 @@ with st.sidebar:
     st.caption("**左键**搜索 · **右键**收录/取消（反色＝已收录）")
     st.caption("**右键图片或图下文案**可编辑该图文案")
 
+    pill_key = f"pills_{dimension}_{group}"
     with st.container(height=320, border=True):
-        picked_word_now = st.pills(
+        st.pills(
             "文案",
             groups[group],
             selection_mode="single",
-            key=f"pills_{dimension}_{group}",
+            key=pill_key,
+            on_change=pick_word,
+            args=(pill_key,),
             label_visibility="collapsed",
         )
-    if picked_word_now and picked_word_now != st.session_state["search_text"]:
-        st.session_state["pending_query"] = picked_word_now
-        st.rerun()
 
     st.caption(
         f"已收录 词 {len(read_lines(WORDS_FILE))} 条 · 图 {len(read_lines(IMAGES_FILE))} 张"
@@ -503,8 +524,10 @@ if view == "搜索结果":
     if not query:
         st.caption("左侧输入搜索词，或点侧边栏里的文案。")
     else:
-        images = fetch_images(query)
-        st.subheader(f"「{query}」· {len(images)} 张")
+        exact = bool(query) and st.session_state.get("exact_query") == query
+        images = fetch_images(query, exact=exact)
+        mode = "精确" if exact else "模糊"
+        st.subheader(f"「{query}」· {mode}匹配 · {len(images)} 张")
         if images:
             clicked_images, clicked_words, clicked_deletes = render_images(
                 images, "search", picked_images_set, picked_words_set
