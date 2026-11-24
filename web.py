@@ -132,9 +132,8 @@ st.markdown(
         text-align: left;
         word-break: break-word;
     }
-    /* 缩略图：固定等高但完整展示（contain，不裁切） */
+    /* 缩略图：等高但完整展示（contain，不裁切）；高度由侧边栏滑块注入 */
     [data-testid="stImage"] img {
-        height: 150px !important;
         width: 100% !important;
         object-fit: contain !important;
         background-color: #000000;
@@ -326,7 +325,7 @@ def sentences_of(image_path):
     return IMAGE_TO_TEXTS.get(stem, [])
 
 
-def render_images(paths, key_prefix, picked_images_set, per_row=5):
+def render_images(paths, key_prefix, picked_images_set, thumb_h=150, per_row=5):
     """图片网格：点图＝收录图，点图下文案＝收录句子。返回 (点击的图, 点击的句子)。"""
     clicked_images, clicked_words, clicked_deletes = [], [], []
     notes = read_notes()
@@ -382,11 +381,11 @@ def render_images(paths, key_prefix, picked_images_set, per_row=5):
         style.append(
             f".st-key-{tile_key} {{ position: relative; }}"
             f".st-key-{button_key} {{ position: absolute; top: 0; left: 0; z-index: 5;"
-            f" width: 100%; height: 150px; }}"
+            f" width: 100%; height: {thumb_h}px; }}"
             f".st-key-{button_key} > div, .st-key-{button_key} [data-testid^='stButton']"
-            f" {{ width: 100% !important; height: 150px !important; }}"
-            f".st-key-{button_key} button {{ width: 100% !important; height: 150px !important;"
-            f" min-height: 150px !important; opacity: 0; cursor: pointer; }}"
+            f" {{ width: 100% !important; height: {thumb_h}px !important; }}"
+            f".st-key-{button_key} button {{ width: 100% !important; height: {thumb_h}px !important;"
+            f" min-height: {thumb_h}px !important; opacity: 0; cursor: pointer; }}"
             # 悬停放大预览：图片变成 fixed 层，按屏幕高/宽自适应（contain）
             f".st-key-{tile_key}:has(.st-key-{button_key}:hover) [data-testid='stImage'] img {{"
             f" position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"
@@ -440,6 +439,9 @@ with st.sidebar:
     )
     st.caption("**左键**搜索 · **点图或图下文案**收藏图片 · **右键图片/文案**编辑文案")
 
+    thumb_h = st.slider("缩略图大小", 90, 320, 150, step=10, help="拖动调整缩略图高度，列数自动适配")
+    per_row = max(2, min(8, round(1200 / (thumb_h * 1.6))))
+
     pill_key = f"pills_{dimension}_{group}"
     with st.container(height=320, border=True):
         st.pills(
@@ -465,6 +467,12 @@ with st.sidebar:
                 if right_pick.get("caption"):
                     st.session_state["edit_prefill"] = right_pick["caption"]
                 st.rerun()
+
+# 缩略图高度（滑块控制，覆盖全部网格）
+st.markdown(
+    f"<style>[data-testid='stImage'] img {{ height: {thumb_h}px !important; }}</style>",
+    unsafe_allow_html=True,
+)
 
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
@@ -534,7 +542,7 @@ if view == "搜索结果":
         st.subheader(f"「{query}」· {mode}匹配 · {len(images)} 张")
         if images:
             clicked_images, clicked_words, clicked_deletes = render_images(
-                images, "search", picked_images_set
+                images, "search", picked_images_set, thumb_h, per_row
             )
             if clicked_deletes:
                 for img, sentence in clicked_deletes:
@@ -557,7 +565,7 @@ elif view == "图片墙":
         if len(wall) > LIMIT:
             st.caption(f"（仅显示前 {LIMIT} 张，选更小的分组或直接用搜索看其余）")
         clicked_images, clicked_words, clicked_deletes = render_images(
-            wall[:LIMIT], "wall", picked_images_set
+            wall[:LIMIT], "wall", picked_images_set, thumb_h, per_row
         )
         if clicked_deletes:
             for img, sentence in clicked_deletes:
@@ -575,7 +583,7 @@ else:  # 已收集
     if picked_images:
         st.caption(f"写入 {IMAGES_FILE} · 点图取消收录 · 点图下文案切换该句的整组图片")
         clicked_images, clicked_words, clicked_deletes = render_images(
-            picked_images, "picked", picked_images_set
+            picked_images, "picked", picked_images_set, thumb_h, per_row
         )
         if clicked_deletes:
             for img, sentence in clicked_deletes:
