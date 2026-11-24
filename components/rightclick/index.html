@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>html, body { margin: 0; padding: 0; height: 1px; overflow: hidden; }</style>
+</head>
+<body>
+<script>
+(function () {
+  // Streamlit 组件协议（最小实现，只用到 ready / frameHeight / value）
+  function post(type, payload) {
+    window.parent.postMessage(
+      Object.assign({ isStreamlitMessage: true, type: type }, payload), "*"
+    );
+  }
+  post("streamlit:componentReady", { apiVersion: 1 });
+  post("streamlit:setFrameHeight", { height: 1 });
+
+  var collected = new Set();
+  var bound = false;
+
+  function ensureStyle(doc) {
+    if (doc.getElementById("vv-pick-style")) return;
+    var s = doc.createElement("style");
+    s.id = "vv-pick-style";
+    s.textContent =
+      'button[data-variant="pills"].is-picked {' +
+      '  background-color: #e8e8e8 !important;' +
+      '  border-color: #e8e8e8 !important; }' +
+      'button[data-variant="pills"].is-picked p { color: #000 !important; }';
+    doc.head.appendChild(s);
+  }
+
+  function mark(doc) {
+    var buttons = doc.querySelectorAll('button[data-variant="pills"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      b.classList.toggle("is-picked", collected.has((b.innerText || "").trim()));
+    }
+  }
+
+  function bind() {
+    if (bound) return;
+    var doc = window.parent.document;
+    if (!doc) return;
+    bound = true;
+    ensureStyle(doc);
+
+    // 右键文案块 = 收录 / 取消收录（阻止浏览器菜单）
+    doc.addEventListener("contextmenu", function (e) {
+      var t = e.target;
+      var btn = t && t.closest ? t.closest('button[data-variant="pills"]') : null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      post("streamlit:setComponentValue", {
+        value: { text: (btn.innerText || "").trim(), ts: Date.now() },
+        dataType: "json"
+      });
+    }, true);
+  }
+
+  window.addEventListener("message", function (e) {
+    var d = e.data;
+    if (!d || d.type !== "streamlit:render") return;
+    var args = d.args || {};
+    collected = new Set(args.collected || []);
+    bind();
+    ensureStyle(window.parent.document);
+    // 文案块可能晚一点渲染，补两次标记
+    setTimeout(function () { mark(window.parent.document); }, 120);
+    setTimeout(function () { mark(window.parent.document); }, 700);
+  });
+
+  bind();
+})();
+</script>
+</body>
+</html>
