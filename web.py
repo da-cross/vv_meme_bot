@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 from PIL import Image
 
 from query import find_matches, locate_matched_images, _load_data
-from text_classify import DIMENSIONS, SORT_KEYS, build_groups
+from text_classify import DIMENSION_SORT, DIMENSIONS, build_groups
 
 WORDS_FILE = "picked_words.txt"
 IMAGES_FILE = "picked_images.txt"
@@ -261,7 +261,7 @@ with st.sidebar:
     query = st.text_input("模糊搜索:", key="search_text")
 
     dimension = st.radio("分类维度", list(DIMENSIONS), key="dimension")
-    sort_by = st.selectbox("排序依据", list(SORT_KEYS), key="sort_by")
+    sort_by = DIMENSION_SORT[dimension]
     descending = (
         st.radio("排序方向", ["升序", "降序"], key="order", horizontal=True) == "降序"
     )
@@ -271,7 +271,8 @@ with st.sidebar:
         f"分组（{len(groups)} 组）", list(groups), key=f"group_{dimension}"
     )
     st.caption(
-        f"{dimension} · {sort_by} {'降序' if descending else '升序'} · {len(groups[group])} 条"
+        f"{dimension} · {'按' + sort_by if sort_by != dimension else ''}"
+        f"{'降序' if descending else '升序'} · {len(groups[group])} 条"
     )
     st.caption("**左键**搜索 · **右键**收录/取消（反色＝已收录）")
 
