@@ -277,7 +277,6 @@ def pick_word(key):
     value = st.session_state.get(key)
     if value:
         st.session_state["pending_query"] = value
-        st.session_state["auto_collect_word"] = value
 
 
 def fetch_images(query, exact=False):
@@ -324,6 +323,14 @@ def delete_caption(image_path, sentence):
     picked = read_lines(WORDS_FILE)
     if sentence in picked:
         write_lines(WORDS_FILE, [w for w in picked if w != sentence])
+
+
+def images_of_word(word):
+    """某条文案对应的所有图片路径。"""
+    return [
+        os.path.join("vvs", name.replace(".txt", ".jpg"))
+        for name in text_to_filepath.get(word, [])
+    ]
 
 
 def sentences_of(image_path):
@@ -479,16 +486,6 @@ with st.sidebar:
                 toggle_words([right_pick.get("text", "")])
             st.rerun()
 
-# 点词条 -> 该词对应的所有图片一并收藏（只追加，不会删已收的）
-auto_word = st.session_state.pop("auto_collect_word", None)
-if auto_word:
-    auto_paths = [
-        os.path.join("vvs", name.replace(".txt", ".jpg"))
-        for name in text_to_filepath.get(auto_word, [])
-    ]
-    if add_images(auto_paths):
-        st.rerun()
-
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
 
@@ -566,7 +563,10 @@ if view == "搜索结果":
                 st.rerun()
             if clicked_images or clicked_words:
                 toggle_images(clicked_images)
+                newly = [w for w in clicked_words if w not in picked_words_set]
                 toggle_words(clicked_words)
+                for word in newly:      # 只有「收藏」动作才连带收图
+                    add_images(images_of_word(word))
                 st.rerun()
         else:
             st.caption("没搜到...")
@@ -588,7 +588,10 @@ elif view == "图片墙":
             st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
+            newly = [w for w in clicked_words if w not in picked_words_set]
             toggle_words(clicked_words)
+            for word in newly:
+                add_images(images_of_word(word))
             st.rerun()
 
 else:  # 已收集
@@ -616,7 +619,10 @@ else:  # 已收集
             st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
+            newly = [w for w in clicked_words if w not in picked_words_set]
             toggle_words(clicked_words)
+            for word in newly:
+                add_images(images_of_word(word))
             st.rerun()
     else:
         st.caption(f"还没有收录图片（{IMAGES_FILE} 为空）")
