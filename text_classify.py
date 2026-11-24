@@ -130,15 +130,48 @@ DIMENSIONS = OrderedDict(
 
 ALL_GROUP = "全部"
 
+# 排序依据 -> 主键；次级键固定用「首字 → 长度 → 文本」，保证同值项顺序稳定可预期
+SORT_KEYS = OrderedDict(
+    (
+        ("首字", lambda text, n: first_pinyin(text) or "~"),
+        ("字数", lambda text, n: len(text)),
+        ("热度", lambda text, n: n),
+    )
+)
+
+_SECONDARY_KEYS = {
+    "首字": lambda text, n: (len(text), text),
+    "字数": lambda text, n: (first_pinyin(text) or "~", text),
+    "热度": lambda text, n: (first_pinyin(text) or "~", len(text), text),
+}
+
+
+def sorted_texts(texts, text_to_filepath, sort_by: str = "首字", descending: bool = False):
+    """按指定依据排序；降序只翻转主键，次级键始终升序。"""
+    def n_images(text):
+        return len(text_to_filepath.get(text, ()))
+
+    items = sorted(texts, key=lambda t: _SECONDARY_KEYS[sort_by](t, n_images(t)))
+    return sorted(
+        items, key=lambda t: SORT_KEYS[sort_by](t, n_images(t)), reverse=descending
+    )
+
 
 def sort_key(text: str):
-    """排序：文本首字（拼音）→ 长度 → 文本本身。"""
+    """默认排序：文本首字（拼音）→ 长度 → 文本本身。"""
     py = first_pinyin(text)
     return (py[:1] or "~", py, len(text), text)
 
 
-def build_groups(texts, text_to_filepath, dimension: str, with_all: bool = True):
-    """返回 OrderedDict{分组名: [文案...]}，组内已按 sort_key 排序。"""
+def build_groups(
+    texts,
+    text_to_filepath,
+    dimension: str,
+    sort_by: str = "首字",
+    descending: bool = False,
+    with_all: bool = True,
+):
+    """返回 OrderedDict{分组名: [文案...]}，组内按 sort_by/descending 排序。"""
     group_fn, order = DIMENSIONS[dimension]
 
     buckets = {}
@@ -154,7 +187,18 @@ def build_groups(texts, text_to_filepath, dimension: str, with_all: bool = True)
     else:
         labels = sorted(buckets, key=lambda label: (label == NO_INITIAL, label))
 
-    groups = OrderedDict((label, sorted(buckets[label], key=sort_key)) for label in labels)
+    groups = OrderedDict(
+        (
+            label,
+            sorted_texts(buckets[label], text_to_filepath, sort_by, descending),
+        )
+        for label in labels
+    )
     if with_all:
-        groups = OrderedDict([(ALL_GROUP, sorted(texts, key=sort_key)), *groups.items()])
+        groups = OrderedDict(
+            [
+                (ALL_GROUP, sorted_texts(texts, text_to_filepath, sort_by, descending)),
+                *groups.items(),
+            ]
+        )
     return groups

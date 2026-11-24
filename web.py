@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 
 from query import find_matches, locate_matched_images, _load_data
-from text_classify import DIMENSIONS, build_groups
+from text_classify import DIMENSIONS, SORT_KEYS, build_groups
 
 st.set_page_config(layout="wide", page_title="全自动VV表情包fetch bot")
 
@@ -36,14 +36,21 @@ if query:
 st.divider()
 
 st.subheader("全部文案")
-st.caption(f"共 {len(text_list)} 条 · 点击任意文案即用该条发起搜索 · 组内按首字、长度排序")
+st.caption(f"共 {len(text_list)} 条 · 点击任意文案即用该条发起搜索")
 
-left, right = st.columns([1, 4])
-dimension = left.radio("分类维度", list(DIMENSIONS), key="dimension")
-groups = build_groups(text_list, text_to_filepath, dimension)
+left, right = st.columns([1, 3])
+with left:
+    dimension = st.radio("分类维度", list(DIMENSIONS), key="dimension")
+    sort_by = st.selectbox("排序依据", list(SORT_KEYS), key="sort_by")
+    descending = (
+        st.radio("排序方向", ["升序", "降序"], key="order", horizontal=True) == "降序"
+    )
+
+groups = build_groups(text_list, text_to_filepath, dimension, sort_by, descending)
 group = right.selectbox(
     f"分组（{len(groups)} 组）", list(groups), key=f"group_{dimension}"
 )
+right.caption(f"当前：{dimension} 分组 · {sort_by} {'降序' if descending else '升序'}")
 
 picked = st.pills(
     "点击文案即搜索",
