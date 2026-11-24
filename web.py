@@ -301,6 +301,14 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
             f" {{ width: 100% !important; height: 150px !important; }}"
             f".st-key-{button_key} button {{ width: 100% !important; height: 150px !important;"
             f" min-height: 150px !important; opacity: 0; cursor: pointer; }}"
+            # 悬停放大预览：图片变成 fixed 层，按屏幕高/宽自适应（contain）
+            f".st-key-{tile_key}:hover [data-testid='stImage'] img {{"
+            f" position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"
+            f" width: 92vw !important; height: 92vh !important; max-width: 92vw;"
+            f" max-height: 92vh; object-fit: contain !important;"
+            f" background-color: #000000; z-index: 2147483000;"
+            f" outline: 1px solid #333333; box-shadow: 0 0 40px rgba(0,0,0,0.9);"
+            f" cursor: zoom-out; pointer-events: none; }}"
             + (
                 f".st-key-{tile_key}::after {{ content: '✓'; position: absolute; top: 4px;"
                 f" right: 6px; z-index: 6; font-size: 1.1rem; color: #000;"
