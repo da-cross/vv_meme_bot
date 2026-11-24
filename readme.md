@@ -3,13 +3,22 @@ Automatic VV meme retrieval
 ![迎头痛击](yingtoutongji.png)
 
 ## Getting Started
-- 安装requirements.txt
-- 命令行打入`streamlit run web.py`
-- 浏览器(自动)前往`http://localhost:8501`
 
-## Data Update
-- 新的表情包图片放入`vvs`文件夹
-- 运行`data_update.py`
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate   # 建议 3.12；3.13 尚无旧版 OCR 依赖的 wheel
+pip install -r requirements.txt
+streamlit run web.py        # → http://localhost:8501
+```
+
+`txts/`、`text_list.txt`、`text_to_filepath.json` 已在仓库内，开箱即可检索，无需 OCR。
+
+### 新增/重建数据（可选）
+
+```bash
+pip install -r requirements-ocr.txt
+pip install --no-deps "cnocr==2.3.1" "cnstd==1.2.5.2"   # 跳过它们声明的 wandb / onnx 等未使用依赖
+python data_update.py      # 需先 source .venv/bin/activate，模型下载要用 venv 里的 huggingface-cli
+```
 
 ## sources: 
 感谢网友分享的图集:

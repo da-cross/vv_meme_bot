@@ -4,7 +4,6 @@ from search_utils import similarity
 from typing import List, Dict
 
 from PIL import Image
-import matplotlib.pyplot as plt
 
 
 def _load_data(text_list: str='text_list.txt', text_to_filepath: str='text_to_filepath.json', txts_json: str='txts.json') -> List[str]:
@@ -39,6 +38,7 @@ def fetch_image(txt_name: str, img_folder: str='vvs', display: bool=True):
     img_path = os.path.join(img_folder, img_name_from_txt)
     print(img_path)
     if display:
+        import matplotlib.pyplot as plt  # 仅调试看图需要，避免 web.py 硬依赖 matplotlib
         img = Image.open(img_path)
         plt.imshow(img)
         plt.axis('off')  # Hide axes
