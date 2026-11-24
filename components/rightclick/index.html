@@ -62,19 +62,19 @@
         return;
       }
 
-      // 图下文案按钮（cap-）：保留默认菜单，方便选中文字
-      if (t.closest('[class*="st-key-cap-"]')) return;
-
-      var tile = t.closest('[class*="-tile-"]');
+      // 图下文案（cap-）：右键 = 以该文案为初值编辑这张图的文案
+      var cap = t.closest('[class*="st-key-cap-"]');
+      var tile = (cap || t).closest('[class*="-tile-"]');
       if (!tile) return;
       var m = (tile.className || "").match(/-tile-([0-9a-f]{10})/);
       if (!m) return;
       e.preventDefault();
       e.stopPropagation();
-      post("streamlit:setComponentValue", {
-        value: { digest: m[1], ts: Date.now() },
-        dataType: "json"
-      });
+      var payload = { digest: m[1], ts: Date.now() };
+      if (cap) {
+        payload.caption = (cap.innerText || "").trim().replace(/^✓\s*/, "");
+      }
+      post("streamlit:setComponentValue", { value: payload, dataType: "json" });
     }, true);
   }
 

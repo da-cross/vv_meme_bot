@@ -343,7 +343,7 @@ with st.sidebar:
         f"{'降序' if descending else '升序'} · {len(groups[group])} 条"
     )
     st.caption("**左键**搜索 · **右键**收录/取消（反色＝已收录）")
-    st.caption("**右键图片**可编辑该图文案")
+    st.caption("**右键图片或图下文案**可编辑该图文案")
 
     with st.container(height=320, border=True):
         picked_word_now = st.pills(
@@ -370,6 +370,11 @@ with st.sidebar:
             st.session_state["rightclick_ts"] = right_pick.get("ts")
             if right_pick.get("digest"):
                 st.session_state["edit_image"] = right_pick.get("digest")
+                st.session_state.pop(
+                    f"note_edit_{right_pick.get('digest')}", None
+                )
+                if right_pick.get("caption"):
+                    st.session_state["edit_prefill"] = right_pick["caption"]
             else:
                 toggle_words([right_pick.get("text", "")])
             st.rerun()
@@ -407,10 +412,13 @@ if edit_digest:
                 st.rerun()
         else:
             st.caption(f"编辑文案 · {os.path.basename(edit_path)}")
+            prefill = notes.get(edit_path)
+            if prefill is None:
+                prefill = st.session_state.get("edit_prefill", "")
             left, right = st.columns([5, 1])
             new_text = left.text_area(
                 "自定义文案",
-                value=notes.get(edit_path, ""),
+                value=prefill,
                 key=f"note_edit_{edit_digest}",
                 height=80,
                 placeholder="写点什么，留空保存 = 删除自定义文案",
@@ -423,9 +431,11 @@ if edit_digest:
                     notes.pop(edit_path, None)
                 write_notes(notes)
                 st.session_state.pop("edit_image", None)
+                st.session_state.pop("edit_prefill", None)
                 st.rerun()
             if right.button("取消", use_container_width=True):
                 st.session_state.pop("edit_image", None)
+                st.session_state.pop("edit_prefill", None)
                 st.rerun()
 
 if view == "搜索结果":
