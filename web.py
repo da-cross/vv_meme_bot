@@ -10,7 +10,6 @@ from query import find_matches, locate_matched_images, _load_data
 from text_classify import DIMENSION_SORT, DIMENSIONS, build_groups
 
 DEFAULT_DIMENSION = "字数"   # 默认分类维度（排序方向默认升序）
-WORDS_FILE = "picked_words.txt"
 IMAGES_FILE = "picked_images.txt"
 NOTES_FILE = "image_notes.json"
 
@@ -133,16 +132,6 @@ st.markdown(
         text-align: left;
         word-break: break-word;
     }
-    /* 已收集句子的小方块 */
-    .chip {
-        display: inline-block;
-        margin: 0 6px 6px 0;
-        padding: 6px 12px;
-        background: #141414;
-        border: 1px solid #242424;
-        color: #e8e8e8;
-        font-size: 0.95rem;
-    }
     /* 缩略图：固定等高但完整展示（contain，不裁切） */
     [data-testid="stImage"] img {
         height: 150px !important;
@@ -197,20 +186,22 @@ def write_notes(notes):
         json.dump(notes, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
-def toggle_words(words):
-    """收录 / 取消收录句子（立刻写回文件）。"""
-    if not words:
+def toggle_word_images(word):
+    """点图下文案：该句对应的图片整组收录 / 整组取消。"""
+    paths = images_of_word(word)
+    if not paths:
         return
-    lines = read_lines(WORDS_FILE)
+    lines = read_lines(IMAGES_FILE)
     present = set(lines)
-    for word in words:
-        if word in present:
-            lines = [line for line in lines if line != word]
-            present.discard(word)
-        else:
-            lines.append(word)
-            present.add(word)
-    write_lines(WORDS_FILE, lines)
+    if all(path in present for path in paths):
+        gone = set(paths)
+        lines = [line for line in lines if line not in gone]
+    else:
+        for path in paths:
+            if path not in present:
+                lines.append(path)
+                present.add(path)
+    write_lines(IMAGES_FILE, lines)
 
 
 def add_images(paths):
@@ -319,10 +310,7 @@ def delete_caption(image_path, sentence):
 
     read_and_save_txt_files("txts")
 
-    # 这句如果之前被收录，一并从清单里移除
-    picked = read_lines(WORDS_FILE)
-    if sentence in picked:
-        write_lines(WORDS_FILE, [w for w in picked if w != sentence])
+
 
 
 def images_of_word(word):
@@ -338,7 +326,7 @@ def sentences_of(image_path):
     return IMAGE_TO_TEXTS.get(stem, [])
 
 
-def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_row=5):
+def render_images(paths, key_prefix, picked_images_set, per_row=5):
     """图片网格：点图＝收录图，点图下文案＝收录句子。返回 (点击的图, 点击的句子)。"""
     clicked_images, clicked_words, clicked_deletes = [], [], []
     notes = read_notes()
@@ -367,7 +355,8 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
                 sentences = sentences_of(path)[:2]
                 can_delete = len(sentences_of(path)) >= 2
                 for sentence in sentences:
-                    collected = sentence in picked_words_set
+                    group = images_of_word(sentence)
+                    collected = bool(group) and all(p in picked_images_set for p in group)
                     sh = hashlib.md5(sentence.encode("utf-8")).hexdigest()[:8]
                     label = f"{'✓ ' if collected else ''}{sentence}"
                     if can_delete:
@@ -449,8 +438,7 @@ with st.sidebar:
         f"{dimension} · {'按' + sort_by if sort_by != dimension else ''}"
         f"{'降序' if descending else '升序'} · {len(groups[group])} 条"
     )
-    st.caption("**左键**搜索 · **右键**收录/取消（反色＝已收录）")
-    st.caption("**右键图片或图下文案**可编辑该图文案")
+    st.caption("**左键**搜索 · **点图或图下文案**收藏图片 · **右键图片/文案**编辑文案")
 
     pill_key = f"pills_{dimension}_{group}"
     with st.container(height=320, border=True):
@@ -464,27 +452,19 @@ with st.sidebar:
             label_visibility="collapsed",
         )
 
-    st.caption(
-        f"已收录 词 {len(read_lines(WORDS_FILE))} 条 · 图 {len(read_lines(IMAGES_FILE))} 张"
-    )
+    st.caption(f"已收录图片 {len(read_lines(IMAGES_FILE))} 张")
 
     # 右键桥：不可见，只负责把父页面右键的文案回传
-    right_pick = rightclick(
-        collected=read_lines(WORDS_FILE), key="rightclick", default=None
-    )
+    right_pick = rightclick(key="rightclick", default=None)
     if right_pick and isinstance(right_pick, dict):
         if right_pick.get("ts") != st.session_state.get("rightclick_ts"):
             st.session_state["rightclick_ts"] = right_pick.get("ts")
             if right_pick.get("digest"):
                 st.session_state["edit_image"] = right_pick.get("digest")
-                st.session_state.pop(
-                    f"note_edit_{right_pick.get('digest')}", None
-                )
+                st.session_state.pop(f"note_edit_{right_pick.get('digest')}", None)
                 if right_pick.get("caption"):
                     st.session_state["edit_prefill"] = right_pick["caption"]
-            else:
-                toggle_words([right_pick.get("text", "")])
-            st.rerun()
+                st.rerun()
 
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
@@ -502,9 +482,8 @@ if picked_view:
     st.session_state["view"] = picked_view
 view = st.session_state.get("view", VIEWS[0])
 
-picked_words = read_lines(WORDS_FILE)
 picked_images = read_lines(IMAGES_FILE)
-picked_words_set, picked_images_set = set(picked_words), set(picked_images)
+picked_images_set = set(picked_images)
 
 # 右键图片 -> 编辑该图的自定义文案
 edit_digest = st.session_state.get("edit_image")
@@ -555,7 +534,7 @@ if view == "搜索结果":
         st.subheader(f"「{query}」· {mode}匹配 · {len(images)} 张")
         if images:
             clicked_images, clicked_words, clicked_deletes = render_images(
-                images, "search", picked_images_set, picked_words_set
+                images, "search", picked_images_set
             )
             if clicked_deletes:
                 for img, sentence in clicked_deletes:
@@ -563,10 +542,8 @@ if view == "搜索结果":
                 st.rerun()
             if clicked_images or clicked_words:
                 toggle_images(clicked_images)
-                newly = [w for w in clicked_words if w not in picked_words_set]
-                toggle_words(clicked_words)
-                for word in newly:      # 只有「收藏」动作才连带收图
-                    add_images(images_of_word(word))
+                for word in clicked_words:
+                    toggle_word_images(word)
                 st.rerun()
         else:
             st.caption("没搜到...")
@@ -580,7 +557,7 @@ elif view == "图片墙":
         if len(wall) > LIMIT:
             st.caption(f"（仅显示前 {LIMIT} 张，选更小的分组或直接用搜索看其余）")
         clicked_images, clicked_words, clicked_deletes = render_images(
-            wall[:LIMIT], "wall", picked_images_set, picked_words_set
+            wall[:LIMIT], "wall", picked_images_set
         )
         if clicked_deletes:
             for img, sentence in clicked_deletes:
@@ -588,30 +565,17 @@ elif view == "图片墙":
             st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
-            newly = [w for w in clicked_words if w not in picked_words_set]
-            toggle_words(clicked_words)
-            for word in newly:
-                add_images(images_of_word(word))
+            for word in clicked_words:
+                toggle_word_images(word)
             st.rerun()
 
 else:  # 已收集
-    st.subheader(f"已收集 · 句 {len(picked_words)} 条 · 图 {len(picked_images)} 张")
-
-    if picked_words:
-        st.markdown(
-            "".join(f'<span class="chip">{w}</span>' for w in picked_words),
-            unsafe_allow_html=True,
-        )
-        st.caption(f"句子写入 {WORDS_FILE} · 在侧边栏右键该词可取消收录")
-    else:
-        st.caption(f"还没有收录句子（{WORDS_FILE} 为空）")
-
-    st.divider()
+    st.subheader(f"已收集 · 图片 {len(picked_images)} 张")
 
     if picked_images:
-        st.markdown(f"**图片 {len(picked_images)} 张** → `{IMAGES_FILE}`（点图取消收录）")
+        st.caption(f"写入 {IMAGES_FILE} · 点图取消收录 · 点图下文案切换该句的整组图片")
         clicked_images, clicked_words, clicked_deletes = render_images(
-            picked_images, "picked", picked_images_set, picked_words_set
+            picked_images, "picked", picked_images_set
         )
         if clicked_deletes:
             for img, sentence in clicked_deletes:
@@ -619,10 +583,8 @@ else:  # 已收集
             st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
-            newly = [w for w in clicked_words if w not in picked_words_set]
-            toggle_words(clicked_words)
-            for word in newly:
-                add_images(images_of_word(word))
+            for word in clicked_words:
+                toggle_word_images(word)
             st.rerun()
     else:
         st.caption(f"还没有收录图片（{IMAGES_FILE} 为空）")
@@ -632,8 +594,7 @@ else:  # 已收集
         with st.expander(f"自定义文案 · {len(notes)} 条 → {NOTES_FILE}"):
             st.json(notes)
 
-    if picked_words or picked_images:
-        if st.button("清空两个清单"):
-            write_lines(WORDS_FILE, [])
+    if picked_images:
+        if st.button("清空图片清单"):
             write_lines(IMAGES_FILE, [])
             st.rerun()
