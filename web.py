@@ -10,23 +10,47 @@ st.set_page_config(layout="wide", page_title="全自动VV表情包fetch bot")
 st.markdown(
     """
     <style>
-    /* 文案选择按钮组：拉大行/列间距 */
+    /* 文案色块：矩形、无圆角、比纯黑底只浅一点点 */
     div[role="radiogroup"] {
-        gap: 12px !important;
-        row-gap: 12px !important;
+        gap: 10px !important;
+        row-gap: 10px !important;
     }
-    /* 按钮本体：字号、内边距、圆角 */
     div[role="radiogroup"] button[data-variant="pills"] {
         height: auto !important;
-        min-height: 42px;
-        padding: 8px 18px !important;
-        font-size: 1.05rem !important;
+        min-height: 40px;
+        padding: 8px 16px !important;
+        border-radius: 0 !important;
+        background-color: #141414 !important;
+        border: 1px solid #242424 !important;
+        color: #e8e8e8 !important;
+        transition: background-color 0.12s ease, border-color 0.12s ease;
     }
     div[role="radiogroup"] button[data-variant="pills"] p {
         font-size: 1.05rem !important;
         line-height: 1.55 !important;
         letter-spacing: 0.02em;
+        color: inherit !important;
     }
+    div[role="radiogroup"] button[data-variant="pills"]:hover {
+        background-color: #1d1d1d !important;
+        border-color: #333333 !important;
+    }
+    /* 选中态：反色，保持对比度 */
+    div[role="radiogroup"] button[data-variant="pills"][aria-checked="true"] {
+        background-color: #e8e8e8 !important;
+        border-color: #e8e8e8 !important;
+        color: #000000 !important;
+    }
+    /* 其他控件跟随：面板边框压暗、统一直角 */
+    [data-testid="stLayoutWrapper"] > div[data-testid="stVerticalBlock"] {
+        border-color: #242424 !important;
+        border-radius: 0 !important;
+    }
+    [data-testid="stTextInputRootElement"],
+    [data-testid="stSelectbox"] div {
+        border-radius: 0 !important;
+    }
+    hr { border-color: #1c1c1c !important; }
     </style>
     """,
     unsafe_allow_html=True,
