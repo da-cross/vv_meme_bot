@@ -213,6 +213,23 @@ def toggle_words(words):
     write_lines(WORDS_FILE, lines)
 
 
+def add_images(paths):
+    """只追加不删除，返回是否有新增。"""
+    if not paths:
+        return False
+    lines = read_lines(IMAGES_FILE)
+    present = set(lines)
+    added = False
+    for path in paths:
+        if path not in present:
+            lines.append(path)
+            present.add(path)
+            added = True
+    if added:
+        write_lines(IMAGES_FILE, lines)
+    return added
+
+
 def toggle_images(paths):
     """收录 / 取消收录图片（立刻写回文件）。"""
     if not paths:
@@ -260,6 +277,7 @@ def pick_word(key):
     value = st.session_state.get(key)
     if value:
         st.session_state["pending_query"] = value
+        st.session_state["auto_collect_word"] = value
 
 
 def fetch_images(query, exact=False):
@@ -460,6 +478,16 @@ with st.sidebar:
             else:
                 toggle_words([right_pick.get("text", "")])
             st.rerun()
+
+# 点词条 -> 该词对应的所有图片一并收藏（只追加，不会删已收的）
+auto_word = st.session_state.pop("auto_collect_word", None)
+if auto_word:
+    auto_paths = [
+        os.path.join("vvs", name.replace(".txt", ".jpg"))
+        for name in text_to_filepath.get(auto_word, [])
+    ]
+    if add_images(auto_paths):
+        st.rerun()
 
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
