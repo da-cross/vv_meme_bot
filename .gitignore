@@ -1,2 +1,8 @@
 __pycache__
 *.pyc
+.venv/
+venv/
+.DS_Store
+*.log
+picked_words.txt
+picked_images.txt

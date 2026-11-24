@@ -1,0 +1,33 @@
+# 重建 txt 索引所需依赖（python data_update.py）
+#
+# 注意：本文件不含 cnocr / cnstd 本身，请配合下面的命令安装：
+#   pip install --no-deps "cnocr==2.3.1" "cnstd==1.2.5.2"
+# 原因：这两个包声明的 wandb / pytorch-lightning / torchmetrics / onnx /
+# ultralytics 在实际推理路径上没有任何 import，用 --no-deps 可避免装回它们。
+# huggingface-hub 需 <1.0：cnstd 靠 `huggingface-cli download` 下载检测模型，
+# 该命令在 1.x 中已被移除（实测 2.4.0 报 FileNotFoundError，0.36.2 正常）。
+#
+# 下面的清单即 cnocr 2.3.1 + cnstd 1.2.5.2 + rapidocr-onnxruntime 1.3.25 的
+# 真实导入闭包（其中 pandas/scipy/seaborn/matplotlib 由 cnstd/__init__.py ->
+# yolov7.layout_analyzer 连带引入，属上游实现细节，无法裁剪）。
+-r requirements.txt
+rapidocr-onnxruntime>=1.3,<1.4
+
+torch
+torchvision
+opencv-python
+onnxruntime
+numpy
+pandas
+scipy
+seaborn
+matplotlib
+huggingface-hub<1.0
+unidecode
+pyyaml
+six
+click
+tqdm
+requests
+shapely
+pyclipper
