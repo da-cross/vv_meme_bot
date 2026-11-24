@@ -148,6 +148,22 @@ st.markdown(
     [data-testid="stSelectbox"] div {
         border-radius: 0 !important;
     }
+    /* 侧边栏收起时，主区吃满释放出来的宽度（侧栏是 translateX 移出，仍占 380px 布局宽度） */
+    [data-testid="stMain"] {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+    [data-testid="stAppViewContainer"]:has([data-testid="stSidebar"][data-collapsed="true"])
+        [data-testid="stMain"] {
+        width: calc(100vw - 80px) !important;
+        margin-left: -300px !important;
+    }
+    [data-testid="stMainBlockContainer"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
     hr { border-color: #1c1c1c !important; }
     </style>
     """,
@@ -378,6 +394,17 @@ def render_images(paths, key_prefix, picked_images_set, thumb_h=150, per_row=5):
                     ):
                         clicked_words.append(sentence)
 
+        picked_css = (
+            f".st-key-{tile_key}::after {{ content: '✓'; position: absolute; top: 4px;"
+            f" right: 6px; z-index: 6; font-size: 1.1rem; color: #000;"
+            f" background: #e8e8e8; width: 22px; height: 22px; line-height: 22px;"
+            f" text-align: center; }}"
+            f".st-key-{tile_key} [data-testid='stImage'] {{ outline: 2px solid #e8e8e8;"
+            f" outline-offset: -2px; }}"
+            if picked
+            else ""
+        )
+
         style.append(
             f".st-key-{tile_key} {{ position: relative; }}"
             f".st-key-{button_key} {{ position: absolute; top: 0; left: 0; z-index: 5;"
@@ -386,24 +413,7 @@ def render_images(paths, key_prefix, picked_images_set, thumb_h=150, per_row=5):
             f" {{ width: 100% !important; height: {thumb_h}px !important; }}"
             f".st-key-{button_key} button {{ width: 100% !important; height: {thumb_h}px !important;"
             f" min-height: {thumb_h}px !important; opacity: 0; cursor: pointer; }}"
-            # 悬停放大预览：图片变成 fixed 层，按屏幕高/宽自适应（contain）
-            f".st-key-{tile_key}:has(.st-key-{button_key}:hover) [data-testid='stImage'] img {{"
-            f" position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"
-            f" width: 92vw !important; height: 92vh !important; max-width: 92vw;"
-            f" max-height: 92vh; object-fit: contain !important;"
-            f" background-color: #000000; z-index: 2147483000;"
-            f" outline: 1px solid #333333; box-shadow: 0 0 40px rgba(0,0,0,0.9);"
-            f" cursor: zoom-out; pointer-events: none; }}"
-            + (
-                f".st-key-{tile_key}::after {{ content: '✓'; position: absolute; top: 4px;"
-                f" right: 6px; z-index: 6; font-size: 1.1rem; color: #000;"
-                f" background: #e8e8e8; width: 22px; height: 22px; line-height: 22px;"
-                f" text-align: center; }}"
-                f".st-key-{tile_key} [data-testid='stImage'] {{ outline: 2px solid #e8e8e8;"
-                f" outline-offset: -2px; }}"
-                if picked
-                else ""
-            )
+            + picked_css
         )
 
     st.markdown(f"<style>{''.join(style)}</style>", unsafe_allow_html=True)
@@ -454,16 +464,7 @@ with st.sidebar:
     st.caption(f"已收录图片 {len(read_lines(IMAGES_FILE))} 张")
 
     # 右键桥：不可见，只负责把父页面右键的文案回传
-    right_pick = rightclick(key="rightclick", default=None)
-    if right_pick and isinstance(right_pick, dict):
-        if right_pick.get("ts") != st.session_state.get("rightclick_ts"):
-            st.session_state["rightclick_ts"] = right_pick.get("ts")
-            if right_pick.get("digest"):
-                st.session_state["edit_image"] = right_pick.get("digest")
-                st.session_state.pop(f"note_edit_{right_pick.get('digest')}", None)
-                if right_pick.get("caption"):
-                    st.session_state["edit_prefill"] = right_pick["caption"]
-                st.rerun()
+
 
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
@@ -485,6 +486,10 @@ with views_col:
 view = st.session_state.get("view", VIEWS[0])
 
 with size_col:
+    hover_preview = st.toggle(
+        "悬停预览", value=True, key="hover_preview",
+        help="鼠标在缩略图上停留 400ms 后全屏预览",
+    )
     thumb_h = st.slider(
         "缩略图大小", 90, 320, 150, step=10, key="thumb_size",
         label_visibility="collapsed",
@@ -496,6 +501,20 @@ st.markdown(
     f"<style>[data-testid='stImage'] img {{ height: {thumb_h}px !important; }}</style>",
     unsafe_allow_html=True,
 )
+
+# 右键桥 + 悬停预览浮层（enabled 跟随上方开关）
+right_pick = rightclick(
+    enabled=hover_preview, key="rightclick", default=None
+)
+if right_pick and isinstance(right_pick, dict):
+    if right_pick.get("ts") != st.session_state.get("rightclick_ts"):
+        st.session_state["rightclick_ts"] = right_pick.get("ts")
+        if right_pick.get("digest"):
+            st.session_state["edit_image"] = right_pick.get("digest")
+            st.session_state.pop(f"note_edit_{right_pick.get('digest')}", None)
+            if right_pick.get("caption"):
+                st.session_state["edit_prefill"] = right_pick["caption"]
+            st.rerun()
 
 picked_images = read_lines(IMAGES_FILE)
 picked_images_set = set(picked_images)

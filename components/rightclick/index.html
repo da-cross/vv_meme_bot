@@ -17,12 +17,82 @@
   post("streamlit:setFrameHeight", { height: 1 });
 
   var bound = false;
+  var HOVER_DELAY = 400;        // 悬停多久才放大
+  var hoverTimer = null;
+  var hoverTile = null;         // 正在计时的 tile
+  var activeRect = null;        // 放大前缩略图的位置
+  var enabled = true;           // 由 Streamlit 侧传进来
+  var overlay = null;
+
+  function inRect(x, y, r) {
+    return r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  function ensureOverlay(doc) {
+    if (overlay && doc.body.contains(overlay)) return overlay;
+    overlay = doc.getElementById("vv-zoom-overlay");
+    if (!overlay) {
+      overlay = doc.createElement("div");
+      overlay.id = "vv-zoom-overlay";
+      overlay.style.cssText = [
+        "position:fixed", "inset:0", "display:none", "z-index:2147483000",
+        "background-color:#000", "background-position:center",
+        "background-repeat:no-repeat", "background-size:contain",
+        "pointer-events:none", "cursor:zoom-out",
+        "outline:1px solid #333"
+      ].join(";");
+      doc.body.appendChild(overlay);
+    }
+    return overlay;
+  }
+
+  function hideOverlay() {
+    clearTimeout(hoverTimer);
+    hoverTimer = null;
+    hoverTile = null;
+    activeRect = null;
+    if (overlay) overlay.style.display = "none";
+  }
+
+  function bindHover(doc) {
+    doc.addEventListener("mousemove", function (e) {
+      // 浮层已显示：指针离开缩略图区域就收起（浮层 pointer-events:none，不影响命中）
+      if (overlay && overlay.style.display === "block") {
+        if (!inRect(e.clientX, e.clientY, activeRect)) hideOverlay();
+        return;
+      }
+      if (!enabled) return;
+
+      var t = e.target;
+      var hit = t && t.closest ? t.closest('[class*="-pick-"]') : null;
+      var tile = hit ? hit.closest('[class*="-tile-"]') : null;
+      if (!tile) { clearTimeout(hoverTimer); hoverTile = null; return; }
+      if (tile === hoverTile) return;
+
+      clearTimeout(hoverTimer);
+      hoverTile = tile;
+      var img = tile.querySelector("[data-testid='stImage'] img");
+      var rect = (img || tile).getBoundingClientRect();
+
+      hoverTimer = setTimeout(function () {
+        if (!hoverTile || !img) return;
+        var o = ensureOverlay(doc);
+        o.style.backgroundImage = 'url("' + img.src + '")';
+        o.style.display = "block";
+        activeRect = rect;
+      }, HOVER_DELAY);
+    }, true);
+
+    doc.addEventListener("mouseleave", hideOverlay, true);
+    doc.addEventListener("scroll", hideOverlay, true);
+  }
 
   function bind() {
     if (bound) return;
     var doc = window.parent.document;
     if (!doc) return;
     bound = true;
+    bindHover(doc);
 
     // 右键图片 / 图片下方文案 = 打开该图的自定义文案编辑
     doc.addEventListener("contextmenu", function (e) {
@@ -52,6 +122,9 @@
   window.addEventListener("message", function (e) {
     var d = e.data;
     if (!d || d.type !== "streamlit:render") return;
+    var args = d.args || {};
+    enabled = args.enabled !== false;
+    if (!enabled) hideOverlay();
     bind();
   });
 
