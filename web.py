@@ -6,6 +6,32 @@ from text_classify import DIMENSIONS, SORT_KEYS, build_groups
 
 st.set_page_config(layout="wide", page_title="全自动VV表情包fetch bot")
 
+# 文案 pills 默认字号 14px / 间距 4px，399 条堆在一起很难读，这里放大一层
+st.markdown(
+    """
+    <style>
+    /* 文案选择按钮组：拉大行/列间距 */
+    div[role="radiogroup"] {
+        gap: 12px !important;
+        row-gap: 12px !important;
+    }
+    /* 按钮本体：字号、内边距、圆角 */
+    div[role="radiogroup"] button[data-variant="pills"] {
+        height: auto !important;
+        min-height: 42px;
+        padding: 8px 18px !important;
+        font-size: 1.05rem !important;
+    }
+    div[role="radiogroup"] button[data-variant="pills"] p {
+        font-size: 1.05rem !important;
+        line-height: 1.55 !important;
+        letter-spacing: 0.02em;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # 点击文案 → 作为搜索词。必须在输入框创建之前写入 session_state
 if "pending_query" in st.session_state:
     st.session_state["search_text"] = st.session_state.pop("pending_query")
@@ -52,12 +78,13 @@ group = right.selectbox(
 )
 right.caption(f"当前：{dimension} 分组 · {sort_by} {'降序' if descending else '升序'}")
 
-picked = st.pills(
-    "点击文案即搜索",
-    groups[group],
-    selection_mode="single",
-    key=f"pills_{dimension}_{group}",
-)
+with st.container(height=560, border=True):
+    picked = st.pills(
+        "点击文案即搜索",
+        groups[group],
+        selection_mode="single",
+        key=f"pills_{dimension}_{group}",
+    )
 if picked and picked != st.session_state["search_text"]:
     st.session_state["pending_query"] = picked
     st.rerun()
