@@ -6,3 +6,4 @@ venv/
 *.log
 picked_words.txt
 picked_images.txt
+image_notes.json

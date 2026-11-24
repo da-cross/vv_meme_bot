@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 
 import streamlit as st
@@ -10,6 +11,7 @@ from text_classify import DIMENSION_SORT, DIMENSIONS, build_groups
 
 WORDS_FILE = "picked_words.txt"
 IMAGES_FILE = "picked_images.txt"
+NOTES_FILE = "image_notes.json"
 
 # 右键收录桥：iframe 里监听父页面的 contextmenu，把点中的文案回传给 Python
 rightclick = components.declare_component("rightclick", path="components/rightclick")
@@ -89,6 +91,17 @@ st.markdown(
     [class*="st-key-cap-"] button:hover p {
         color: #ffffff !important;
     }
+    /* 图片下的自定义文案 */
+    .note {
+        margin: 2px 0 4px 0;
+        padding: 4px 6px;
+        border-left: 2px solid #e8e8e8;
+        color: #e8e8e8;
+        font-size: 0.82rem;
+        line-height: 1.45;
+        text-align: left;
+        word-break: break-word;
+    }
     /* 已收集句子的小方块 */
     .chip {
         display: inline-block;
@@ -134,6 +147,23 @@ def read_lines(path):
 def write_lines(path, lines):
     with open(path, "w", encoding="utf-8") as f:
         f.write("".join(f"{line}\n" for line in lines))
+
+
+def read_notes():
+    """图片 -> 自定义文案。"""
+    if not os.path.exists(NOTES_FILE):
+        return {}
+    try:
+        with open(NOTES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def write_notes(notes):
+    with open(NOTES_FILE, "w", encoding="utf-8") as f:
+        json.dump(notes, f, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def toggle_words(words):
@@ -183,6 +213,10 @@ for _text, _files in text_to_filepath.items():
         IMAGE_TO_TEXTS.setdefault(_file, []).append(_text)
 
 
+# 右键入编辑：digest -> 图片路径。放 session_state 里，跨 rerun 保留
+DIGEST_PATHS = st.session_state.setdefault("digest_paths", {})
+
+
 def fetch_images(query):
     results = find_matches(query, text_list, text_to_filepath)
     return locate_matched_images(results)
@@ -207,11 +241,13 @@ def sentences_of(image_path):
 def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_row=5):
     """图片网格：点图＝收录图，点图下文案＝收录句子。返回 (点击的图, 点击的句子)。"""
     clicked_images, clicked_words = [], []
+    notes = read_notes()
     style = []
     cols = st.columns(per_row)
 
     for i, path in enumerate(paths):
         digest = hashlib.md5(path.encode("utf-8")).hexdigest()[:10]
+        DIGEST_PATHS[digest] = path
         picked = path in picked_images_set
         tile_key = f"{key_prefix}-tile-{digest}"
         button_key = f"{key_prefix}-pick-{digest}"
@@ -221,6 +257,12 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
                 st.image(Image.open(path), use_container_width=True)
                 if st.button(" ", key=button_key, use_container_width=True):
                     clicked_images.append(path)
+
+                custom = notes.get(path)
+                if custom:
+                    st.markdown(
+                        f'<div class="note">✎ {custom}</div>', unsafe_allow_html=True
+                    )
 
                 for sentence in sentences_of(path)[:2]:
                     collected = sentence in picked_words_set
@@ -277,6 +319,7 @@ with st.sidebar:
         f"{'降序' if descending else '升序'} · {len(groups[group])} 条"
     )
     st.caption("**左键**搜索 · **右键**收录/取消（反色＝已收录）")
+    st.caption("**右键图片**可编辑该图文案")
 
     with st.container(height=320, border=True):
         picked_word_now = st.pills(
@@ -301,7 +344,10 @@ with st.sidebar:
     if right_pick and isinstance(right_pick, dict):
         if right_pick.get("ts") != st.session_state.get("rightclick_ts"):
             st.session_state["rightclick_ts"] = right_pick.get("ts")
-            toggle_words([right_pick.get("text", "")])
+            if right_pick.get("digest"):
+                st.session_state["edit_image"] = right_pick.get("digest")
+            else:
+                toggle_words([right_pick.get("text", "")])
             st.rerun()
 
 # ---------------------------------------------------------------- 主区
@@ -318,6 +364,40 @@ view = st.radio(
 picked_words = read_lines(WORDS_FILE)
 picked_images = read_lines(IMAGES_FILE)
 picked_words_set, picked_images_set = set(picked_words), set(picked_images)
+
+# 右键图片 -> 编辑该图的自定义文案
+edit_digest = st.session_state.get("edit_image")
+if edit_digest:
+    edit_path = DIGEST_PATHS.get(edit_digest)
+    notes = read_notes()
+    with st.container(border=True):
+        if not edit_path:
+            st.caption("这张图不在当前视图里了，请重新右键。")
+            if st.button("关闭"):
+                st.session_state.pop("edit_image", None)
+                st.rerun()
+        else:
+            st.caption(f"编辑文案 · {os.path.basename(edit_path)}")
+            left, right = st.columns([5, 1])
+            new_text = left.text_area(
+                "自定义文案",
+                value=notes.get(edit_path, ""),
+                key=f"note_edit_{edit_digest}",
+                height=80,
+                placeholder="写点什么，留空保存 = 删除自定义文案",
+                label_visibility="collapsed",
+            )
+            if right.button("保存", use_container_width=True):
+                if new_text.strip():
+                    notes[edit_path] = new_text.strip()
+                else:
+                    notes.pop(edit_path, None)
+                write_notes(notes)
+                st.session_state.pop("edit_image", None)
+                st.rerun()
+            if right.button("取消", use_container_width=True):
+                st.session_state.pop("edit_image", None)
+                st.rerun()
 
 if view == "搜索结果":
     if not query:
@@ -377,6 +457,11 @@ else:  # 已收集
             st.rerun()
     else:
         st.caption(f"还没有收录图片（{IMAGES_FILE} 为空）")
+
+    notes = read_notes()
+    if notes:
+        with st.expander(f"自定义文案 · {len(notes)} 条 → {NOTES_FILE}"):
+            st.json(notes)
 
     if picked_words or picked_images:
         if st.button("清空两个清单"):

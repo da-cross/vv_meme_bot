@@ -46,15 +46,33 @@
     bound = true;
     ensureStyle(doc);
 
-    // 右键文案块 = 收录 / 取消收录（阻止浏览器菜单）
+    // 右键文案块 = 收录 / 取消收录；右键图片 = 编辑该图文案
     doc.addEventListener("contextmenu", function (e) {
       var t = e.target;
-      var btn = t && t.closest ? t.closest('button[data-variant="pills"]') : null;
-      if (!btn) return;
+      if (!t || !t.closest) return;
+
+      var btn = t.closest('button[data-variant="pills"]');
+      if (btn) {
+        e.preventDefault();
+        e.stopPropagation();
+        post("streamlit:setComponentValue", {
+          value: { text: (btn.innerText || "").trim(), ts: Date.now() },
+          dataType: "json"
+        });
+        return;
+      }
+
+      // 图下文案按钮（cap-）：保留默认菜单，方便选中文字
+      if (t.closest('[class*="st-key-cap-"]')) return;
+
+      var tile = t.closest('[class*="-tile-"]');
+      if (!tile) return;
+      var m = (tile.className || "").match(/-tile-([0-9a-f]{10})/);
+      if (!m) return;
       e.preventDefault();
       e.stopPropagation();
       post("streamlit:setComponentValue", {
-        value: { text: (btn.innerText || "").trim(), ts: Date.now() },
+        value: { digest: m[1], ts: Date.now() },
         dataType: "json"
       });
     }, true);
