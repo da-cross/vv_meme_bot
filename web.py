@@ -99,10 +99,12 @@ st.markdown(
         color: #e8e8e8;
         font-size: 0.95rem;
     }
-    /* 图片墙：等高裁切，直角 */
+    /* 缩略图：固定等高但完整展示（contain，不裁切） */
     [data-testid="stImage"] img {
         height: 150px !important;
-        object-fit: cover;
+        width: 100% !important;
+        object-fit: contain !important;
+        background-color: #000000;
         border-radius: 0 !important;
     }
     /* 其他控件跟随：面板边框压暗、统一直角 */
