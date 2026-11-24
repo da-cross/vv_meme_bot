@@ -9,6 +9,7 @@ from PIL import Image
 from query import find_matches, locate_matched_images, _load_data
 from text_classify import DIMENSION_SORT, DIMENSIONS, build_groups
 
+DEFAULT_DIMENSION = "字数"   # 默认分类维度（排序方向默认升序）
 WORDS_FILE = "picked_words.txt"
 IMAGES_FILE = "picked_images.txt"
 NOTES_FILE = "image_notes.json"
@@ -304,7 +305,12 @@ with st.sidebar:
 
     query = st.text_input("模糊搜索:", key="search_text")
 
-    dimension = st.radio("分类维度", list(DIMENSIONS), key="dimension")
+    dimension = st.radio(
+        "分类维度",
+        list(DIMENSIONS),
+        index=list(DIMENSIONS).index(DEFAULT_DIMENSION),
+        key="dimension",
+    )
     sort_by = DIMENSION_SORT[dimension]
     descending = (
         st.radio("排序方向", ["升序", "降序"], key="order", horizontal=True) == "降序"
