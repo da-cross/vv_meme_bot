@@ -110,6 +110,18 @@ st.markdown(
         background-color: #e8e8e8 !important;
         color: #000000 !important;
     }
+    /* 文案行尾的删除按钮 */
+    [class*="st-key-del-"] button {
+        background: transparent !important;
+        border: none !important;
+        min-height: 0 !important;
+        height: auto !important;
+        padding: 0 2px !important;
+        color: #5c5c5c !important;
+        font-size: 0.85rem !important;
+        line-height: 1 !important;
+    }
+    [class*="st-key-del-"] button:hover { color: #ffffff !important; }
     /* 图片下的自定义文案 */
     .note {
         margin: 2px 0 4px 0;
@@ -252,6 +264,31 @@ def group_images(words):
     return paths
 
 
+def delete_caption(image_path, sentence):
+    """从该图的 OCR 文本里删掉一句，并重建索引（text_list / text_to_filepath）。"""
+    txt_name = os.path.basename(image_path).replace(".jpg", ".txt")
+    txt_path = os.path.join("txts", txt_name)
+    if not os.path.exists(txt_path):
+        return
+    with open(txt_path, encoding="utf-8") as f:
+        lines = [line.rstrip("\n") for line in f]
+    kept = [line for line in lines if line.strip() != sentence]
+    if len(kept) == len(lines):
+        return
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("".join(f"{line}\n" for line in kept if line.strip()))
+
+    # 索引跟着重建，页面上的分组/搜索立刻一致
+    from data_update import read_and_save_txt_files
+
+    read_and_save_txt_files("txts")
+
+    # 这句如果之前被收录，一并从清单里移除
+    picked = read_lines(WORDS_FILE)
+    if sentence in picked:
+        write_lines(WORDS_FILE, [w for w in picked if w != sentence])
+
+
 def sentences_of(image_path):
     stem = os.path.basename(image_path).replace(".jpg", ".txt")
     return IMAGE_TO_TEXTS.get(stem, [])
@@ -259,7 +296,7 @@ def sentences_of(image_path):
 
 def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_row=5):
     """图片网格：点图＝收录图，点图下文案＝收录句子。返回 (点击的图, 点击的句子)。"""
-    clicked_images, clicked_words = [], []
+    clicked_images, clicked_words, clicked_deletes = [], [], []
     notes = read_notes()
     style = []
     cols = st.columns(per_row)
@@ -283,13 +320,29 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
                         f'<div class="note">✎ {custom}</div>', unsafe_allow_html=True
                     )
 
-                for sentence in sentences_of(path)[:2]:
+                sentences = sentences_of(path)[:2]
+                can_delete = len(sentences_of(path)) >= 2
+                for sentence in sentences:
                     collected = sentence in picked_words_set
-                    key = f"cap-{digest}-{hashlib.md5(sentence.encode('utf-8')).hexdigest()[:8]}"
-                    if st.button(
-                        f"{'✓ ' if collected else ''}{sentence}",
-                        key=key,
-                        use_container_width=True,
+                    sh = hashlib.md5(sentence.encode("utf-8")).hexdigest()[:8]
+                    label = f"{'✓ ' if collected else ''}{sentence}"
+                    if can_delete:
+                        c_cap, c_del = st.columns([9, 1])
+                        if c_cap.button(
+                            label,
+                            key=f"cap-{digest}-{sh}",
+                            use_container_width=True,
+                        ):
+                            clicked_words.append(sentence)
+                        if c_del.button(
+                            "×",
+                            key=f"del-{digest}-{sh}",
+                            use_container_width=True,
+                            help="删除这条文案（仅这张图）",
+                        ):
+                            clicked_deletes.append((path, sentence))
+                    elif st.button(
+                        label, key=f"cap-{digest}-{sh}", use_container_width=True
                     ):
                         clicked_words.append(sentence)
 
@@ -302,7 +355,7 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
             f".st-key-{button_key} button {{ width: 100% !important; height: 150px !important;"
             f" min-height: 150px !important; opacity: 0; cursor: pointer; }}"
             # 悬停放大预览：图片变成 fixed 层，按屏幕高/宽自适应（contain）
-            f".st-key-{tile_key}:hover [data-testid='stImage'] img {{"
+            f".st-key-{tile_key}:has(.st-key-{button_key}:hover) [data-testid='stImage'] img {{"
             f" position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);"
             f" width: 92vw !important; height: 92vh !important; max-width: 92vw;"
             f" max-height: 92vh; object-fit: contain !important;"
@@ -322,7 +375,7 @@ def render_images(paths, key_prefix, picked_images_set, picked_words_set, per_ro
         )
 
     st.markdown(f"<style>{''.join(style)}</style>", unsafe_allow_html=True)
-    return clicked_images, clicked_words
+    return clicked_images, clicked_words, clicked_deletes
 
 
 # ---------------------------------------------------------------- 侧边栏
@@ -453,9 +506,13 @@ if view == "搜索结果":
         images = fetch_images(query)
         st.subheader(f"「{query}」· {len(images)} 张")
         if images:
-            clicked_images, clicked_words = render_images(
+            clicked_images, clicked_words, clicked_deletes = render_images(
                 images, "search", picked_images_set, picked_words_set
             )
+            if clicked_deletes:
+                for img, sentence in clicked_deletes:
+                    delete_caption(img, sentence)
+                st.rerun()
             if clicked_images or clicked_words:
                 toggle_images(clicked_images)
                 toggle_words(clicked_words)
@@ -471,9 +528,13 @@ elif view == "图片墙":
         LIMIT = 60
         if len(wall) > LIMIT:
             st.caption(f"（仅显示前 {LIMIT} 张，选更小的分组或直接用搜索看其余）")
-        clicked_images, clicked_words = render_images(
+        clicked_images, clicked_words, clicked_deletes = render_images(
             wall[:LIMIT], "wall", picked_images_set, picked_words_set
         )
+        if clicked_deletes:
+            for img, sentence in clicked_deletes:
+                delete_caption(img, sentence)
+            st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
             toggle_words(clicked_words)
@@ -495,9 +556,13 @@ else:  # 已收集
 
     if picked_images:
         st.markdown(f"**图片 {len(picked_images)} 张** → `{IMAGES_FILE}`（点图取消收录）")
-        clicked_images, clicked_words = render_images(
+        clicked_images, clicked_words, clicked_deletes = render_images(
             picked_images, "picked", picked_images_set, picked_words_set
         )
+        if clicked_deletes:
+            for img, sentence in clicked_deletes:
+                delete_caption(img, sentence)
+            st.rerun()
         if clicked_images or clicked_words:
             toggle_images(clicked_images)
             toggle_words(clicked_words)
