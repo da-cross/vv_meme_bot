@@ -439,9 +439,6 @@ with st.sidebar:
     )
     st.caption("**左键**搜索 · **点图或图下文案**收藏图片 · **右键图片/文案**编辑文案")
 
-    thumb_h = st.slider("缩略图大小", 90, 320, 150, step=10, help="拖动调整缩略图高度，列数自动适配")
-    per_row = max(2, min(8, round(1200 / (thumb_h * 1.6))))
-
     pill_key = f"pills_{dimension}_{group}"
     with st.container(height=320, border=True):
         st.pills(
@@ -468,27 +465,37 @@ with st.sidebar:
                     st.session_state["edit_prefill"] = right_pick["caption"]
                 st.rerun()
 
-# 缩略图高度（滑块控制，覆盖全部网格）
-st.markdown(
-    f"<style>[data-testid='stImage'] img {{ height: {thumb_h}px !important; }}</style>",
-    unsafe_allow_html=True,
-)
-
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
 
 VIEWS = ("搜索结果", "图片墙", "已收集")
-picked_view = st.pills(
-    "视图",
-    VIEWS,
-    selection_mode="single",
-    key="view_pick",
-    default=st.session_state.get("view", VIEWS[0]),
-    label_visibility="collapsed",
-)
-if picked_view:
-    st.session_state["view"] = picked_view
+views_col, size_col = st.columns([3, 1], vertical_alignment="center")
+
+with views_col:
+    picked_view = st.pills(
+        "视图",
+        VIEWS,
+        selection_mode="single",
+        key="view_pick",
+        default=st.session_state.get("view", VIEWS[0]),
+        label_visibility="collapsed",
+    )
+    if picked_view:
+        st.session_state["view"] = picked_view
 view = st.session_state.get("view", VIEWS[0])
+
+with size_col:
+    thumb_h = st.slider(
+        "缩略图大小", 90, 320, 150, step=10, key="thumb_size",
+        label_visibility="collapsed",
+        help="缩略图高度（px），列数自动适配；影响搜索结果 / 图片墙 / 已收集",
+    )
+per_row = max(2, min(8, round(1200 / (thumb_h * 1.6))))
+
+st.markdown(
+    f"<style>[data-testid='stImage'] img {{ height: {thumb_h}px !important; }}</style>",
+    unsafe_allow_html=True,
+)
 
 picked_images = read_lines(IMAGES_FILE)
 picked_images_set = set(picked_images)
@@ -559,7 +566,7 @@ if view == "搜索结果":
 elif view == "图片墙":
     wall = group_images(groups[group])
     st.subheader(f"图片墙 · {group} · {len(wall)} 张")
-    st.caption("点图＝收录图片 · 点图下文案＝收录句子")
+    st.caption("点图＝收藏/取消该图 · 点图下文案＝收藏/取消该句对应的整组图片")
     if wall:
         LIMIT = 60
         if len(wall) > LIMIT:
