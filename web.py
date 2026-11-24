@@ -92,6 +92,24 @@ st.markdown(
     [class*="st-key-cap-"] button:hover p {
         color: #ffffff !important;
     }
+    /* 视图切换：无边框、无圆角，只靠底色区分 */
+    [class*="st-key-view_pick"] button[data-variant="pills"] {
+        border: none !important;
+        border-radius: 0 !important;
+        min-height: 34px;
+        padding: 6px 16px !important;
+        background-color: #141414 !important;
+        color: #b9b9b9 !important;
+    }
+    [class*="st-key-view_pick"] button[data-variant="pills"]:hover {
+        background-color: #202020 !important;
+        color: #ffffff !important;
+    }
+    [class*="st-key-view_pick"] button[data-variant="pills"][aria-checked="true"],
+    [class*="st-key-view_pick"] button[data-variant="pills"][aria-pressed="true"] {
+        background-color: #e8e8e8 !important;
+        color: #000000 !important;
+    }
     /* 图片下的自定义文案 */
     .note {
         margin: 2px 0 4px 0;
@@ -359,13 +377,18 @@ with st.sidebar:
 # ---------------------------------------------------------------- 主区
 st.title("全自动VV表情包fetch bot")
 
-view = st.radio(
+VIEWS = ("搜索结果", "图片墙", "已收集")
+picked_view = st.pills(
     "视图",
-    ["搜索结果", "图片墙", "已收集"],
-    horizontal=True,
-    key="view",
+    VIEWS,
+    selection_mode="single",
+    key="view_pick",
+    default=st.session_state.get("view", VIEWS[0]),
     label_visibility="collapsed",
 )
+if picked_view:
+    st.session_state["view"] = picked_view
+view = st.session_state.get("view", VIEWS[0])
 
 picked_words = read_lines(WORDS_FILE)
 picked_images = read_lines(IMAGES_FILE)
